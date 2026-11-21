@@ -506,6 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAuthUI();
     injectWhatsApp();
     injectScrollTop();
+    injectChatbot();
 
     // Global image fallback handler for broken external URLs
     window.addEventListener('error', function(e) {
@@ -665,4 +666,47 @@ async function performSocialLogin(provider, email, name, avatar) {
         alert(err.message || 'Social login error occurred.');
         closeSocialModal();
     }
+}
+
+/* ---------- AI CHATBOT (under 40 lines) ---------- */
+function injectChatbot() {
+    if (document.getElementById('aiChatBtn')) return;
+    document.body.insertAdjacentHTML('beforeend', `
+        <button id="aiChatBtn" onclick="toggleAiChat()" title="Ask AI Travel Assistant" style="position:fixed;bottom:24px;right:92px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--green-800,#0a6b3a),var(--gold-600,#c9a24c));color:#fff;border:none;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer;z-index:999;font-size:1.35rem;display:flex;align-items:center;justify-content:center;transition:.25s;"><i class="fas fa-robot"></i></button>
+        <div id="aiChatBox" style="display:none;position:fixed;bottom:90px;right:24px;width:320px;height:420px;background:#fff;border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.25);z-index:9999;flex-direction:column;overflow:hidden;border:1px solid #e2e8f0;font-family:sans-serif;">
+            <div style="background:linear-gradient(135deg,var(--green-900,#06381e),var(--green-700,#0a6b3a));color:#fff;padding:14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;">
+                <span style="display:flex;align-items:center;gap:8px;"><i class="fas fa-robot" style="color:var(--gold-400,#dfba6b);"></i> AI Travel Assistant</span>
+                <button onclick="toggleAiChat()" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;">✕</button>
+            </div>
+            <div id="aiChatLogs" style="flex:1;padding:12px;overflow-y:auto;font-size:.88rem;display:flex;flex-direction:column;gap:8px;">
+                <div style="background:#eafaf1;color:#1e4620;padding:8px 12px;border-radius:10px;align-self:flex-start;max-width:85%;">Salam! Ask me anything about our tours & packages across Pakistan.</div>
+            </div>
+            <form onsubmit="sendAiChat(event)" style="display:flex;border-top:1px solid #edf2f7;margin:0;background:#fff;">
+                <input id="aiChatInput" placeholder="Ask about tours, prices, destinations..." style="flex:1;border:none;padding:12px;outline:none;font-size:.88rem;" required>
+                <button type="submit" style="background:none;border:none;color:var(--green-700,#0a6b3a);padding:0 14px;cursor:pointer;font-size:1rem;"><i class="fas fa-paper-plane"></i></button>
+            </form>
+        </div>`);
+}
+function toggleAiChat() {
+    const b = document.getElementById('aiChatBox');
+    if (b) b.style.display = b.style.display === 'none' ? 'flex' : 'none';
+}
+async function sendAiChat(e) {
+    e.preventDefault();
+    const inp = document.getElementById('aiChatInput'), logs = document.getElementById('aiChatLogs');
+    const msg = inp.value.trim(); if (!msg) return;
+    logs.insertAdjacentHTML('beforeend', `<div style="background:#f1f3f5;color:#222;padding:8px 12px;border-radius:10px;align-self:flex-end;max-width:85%;">${msg}</div>`);
+    inp.value = ''; logs.scrollTop = logs.scrollHeight;
+    const typing = document.createElement('div');
+    typing.innerHTML = `<div style="background:#eafaf1;color:#666;padding:8px 12px;border-radius:10px;align-self:flex-start;"><i class="fas fa-spinner fa-spin"></i> Thinking...</div>`;
+    logs.appendChild(typing); logs.scrollTop = logs.scrollHeight;
+    try {
+        const url = (typeof API !== 'undefined' && API.getBaseUrl ? API.getBaseUrl() : 'https://pakistan-tourism-wj.up.railway.app') + '/api/chat';
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) });
+        const data = await res.json();
+        typing.innerHTML = `<div style="background:#eafaf1;color:#1e4620;padding:8px 12px;border-radius:10px;align-self:flex-start;max-width:85%;">${data.reply || data.error || 'No response.'}</div>`;
+    } catch {
+        typing.innerHTML = `<div style="background:#fde8e8;color:#c0392b;padding:8px 12px;border-radius:10px;align-self:flex-start;">Could not reach chat server.</div>`;
+    }
+    logs.scrollTop = logs.scrollHeight;
 }

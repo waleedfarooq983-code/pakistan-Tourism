@@ -32,6 +32,7 @@ import contactRoutes from './routes/contact.js';
 import newsletterRoutes from './routes/newsletter.js';
 import uploadRoutes from './routes/upload.js';
 import adminRoutes from './routes/admin.js';
+import chatRoutes from './routes/chat.js';
 
 const app = express();
 
@@ -114,6 +115,7 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/chat', chatRoutes);
 
 // 8. Serve Frontend Static Assets
 app.use(express.static(clientDir));
