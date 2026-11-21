@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head><title>JSON Test</title></head>
+<body style="font-family:monospace;padding:30px;background:#111;color:#0f0;">
+<h1>🔍 JSON Load Test</h1>
+<div id="out">Loading…</div>
+
+<script>
+(async () => {
+    const out = document.getElementById('out');
+    let html = '';
+
+    async function testFile(path) {
+        try {
+            const r = await fetch(path);
+            if (!r.ok) {
+                html += `<p style="color:#f66;">❌ <b>${path}</b> — HTTP ${r.status} ${r.statusText}</p>`;
+                return null;
+            }
+            const text = await r.text();
+            try {
+                const data = JSON.parse(text);
+                const arr = Array.isArray(data) ? data : [data];
+                html += `<p style="color:#0f0;">✅ <b>${path}</b> — parsed OK (${arr.length} items)</p>`;
+                return data;
+            } catch (e) {
+                html += `<p style="color:#f66;">❌ <b>${path}</b> — JSON PARSE ERROR:<br>&nbsp;&nbsp;${e.message}</p>`;
+                html += `<p style="color:#ff0;">First 200 chars:</p><pre style="background:#222;padding:10px;color:#0f0;">${text.substring(0,200).replace(/</g,'&lt;')}</pre>`;
+                return null;
+            }
+        } catch (e) {
+            html += `<p style="color:#f66;">❌ <b>${path}</b> — FETCH FAILED: ${e.message}</p>`;
+            return null;
+        }
+    }
+
+    const dests = await testFile('data/destinations.json');
+    const tours = await testFile('data/tours.json');
+
+    if (dests && dests[0]) {
+        const d = dests[0];
+        html += `<hr><p><b>First destination keys:</b></p><pre style="background:#222;padding:10px;color:#0f0;">${Object.keys(d).join(', ')}</pre>`;
+        const needed = ['culture','food','activities','travelTips','faqs','reviews','nearbyAttractions','weather','longDescription'];
+        const missing = needed.filter(k => !d[k]);
+        if (missing.length) {
+            html += `<p style="color:#f66;"><b>⚠ MISSING FIELDS:</b> ${missing.join(', ')}</p>`;
+            html += `<p style="color:#ff0;">→ Your <b>data/destinations.json</b> was NOT updated. Please replace it with the Stage 3 version.</p>`;
+        } else {
+            html += `<p style="color:#0f0;">✅ All expected fields present!</p>`;
+        }
+    }
+
+    out.innerHTML = html;
+})();
+</script>
+</body>
+</html>
