@@ -5,13 +5,13 @@
  */
 
 const API = (() => {
-    // Configurable API Base URL: checks window config, localStorage, or defaults to local backend
+    // Configurable API Base URL: checks window config, localStorage, or defaults to Railway backend
     const getBaseUrl = () => {
         if (window.API_BASE_URL) return window.API_BASE_URL.replace(/\/$/, '');
         const saved = localStorage.getItem('API_BASE_URL');
         if (saved) return saved.replace(/\/$/, '');
-        // In local development, port 5001 is default backend port
-        return 'http://localhost:5001';
+        // Production backend on Railway
+        return 'https://pakistan-tourism-wj.up.railway.app';
     };
 
     /* -------------------------------------------------------------

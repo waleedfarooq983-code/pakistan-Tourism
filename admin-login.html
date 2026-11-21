@@ -407,7 +407,7 @@ async function submitAdminLogin(e) {
 
     const baseUrl = (typeof API !== 'undefined' && API.getBaseUrl)
         ? API.getBaseUrl()
-        : 'http://localhost:5001';
+        : 'https://pakistan-tourism-wj.up.railway.app';
 
     try {
         const response = await fetch(`${baseUrl}/api/auth/login`, {
@@ -451,7 +451,7 @@ async function submitAdminLogin(e) {
         }, 600);
 
     } catch (err) {
-        showAlert('Unable to connect to the authentication server. Please ensure the backend is running on port 5001.');
+        showAlert('Unable to connect to the authentication server. Please check your internet connection.');
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<i class="fas fa-lock"></i> Sign In to Admin Panel';
     }
