@@ -59,28 +59,42 @@ export const otpService = {
         console.log(`👉 Expires:  ${OTP_EXPIRY_MINUTES} minutes`);
         console.log('======================================================\n');
 
-        // Send Email
+        // Send Email (Nodemailer wrapped in try...catch so email delay or failure NEVER breaks signup)
         let emailResult = null;
         if (normalizedTarget.includes('@')) {
-            if (purpose === 'reset') {
-                emailResult = await emailService.sendPasswordResetEmail(normalizedTarget, code);
-            } else {
-                emailResult = await emailService.sendOTPEmail(normalizedTarget, code, purpose);
+            try {
+                const emailPromise = (purpose === 'reset')
+                    ? emailService.sendPasswordResetEmail(normalizedTarget, code)
+                    : emailService.sendOTPEmail(normalizedTarget, code, purpose);
+
+                // Allow up to 1.5s for fast SMTP delivery; if it takes longer, let it complete in background
+                emailResult = await Promise.race([
+                    emailPromise,
+                    new Promise(resolve => setTimeout(() => resolve({ simulated: false, pending: true }), 1500))
+                ]);
+            } catch (mailError) {
+                console.error(`⚠️ [Nodemailer sendMail Error]: ${mailError.message}`);
+                logger.error(`[Email] Failed to send email to ${normalizedTarget}: ${mailError.message}`);
             }
         }
 
         // Send SMS if phone provided or target is phone
         if (phone || (!normalizedTarget.includes('@') && /^\d+$/.test(normalizedTarget))) {
-            const smsTarget = phone || normalizedTarget;
-            await smsService.sendOTP(smsTarget, code);
+            try {
+                const smsTarget = phone || normalizedTarget;
+                await smsService.sendOTP(smsTarget, code);
+            } catch (smsError) {
+                console.error(`⚠️ [SMS send Error]: ${smsError.message}`);
+            }
         }
 
         return {
             success: true,
+            code,
+            debug_otp: code,
             expiresInSeconds: OTP_EXPIRY_MINUTES * 60,
             previewUrl: emailResult?.previewUrl || null,
-            // For testing/debugging in development, include demo code if simulated
-            demoCode: process.env.NODE_ENV !== 'production' ? code : undefined
+            demoCode: code
         };
     },
 

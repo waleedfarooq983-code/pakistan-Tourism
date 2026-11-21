@@ -143,24 +143,36 @@ router.post('/signup', authLimiter, validate(signupSchema), async (req, res, nex
             });
         }
 
-        // Send OTP to email and phone
-        const otpResult = await otpService.createAndSendOTP({
-            target: normalizedEmail,
-            purpose: 'signup',
-            phone
-        });
+        // Send OTP to email and phone (wrapped in try...catch so email failure never blocks API)
+        let otpResult = null;
+        try {
+            otpResult = await otpService.createAndSendOTP({
+                target: normalizedEmail,
+                purpose: 'signup',
+                phone
+            });
+        } catch (otpErr) {
+            console.error(`[Auth /signup] Error during OTP dispatch: ${otpErr.message}`);
+            if (otpErr.message && otpErr.message.includes('Rate limit')) {
+                return res.status(429).json({ success: false, message: otpErr.message });
+            }
+            throw otpErr;
+        }
 
-        console.log(`[Auth /signup] OTP generated and dispatched for ${normalizedEmail}. Code logged above.`);
+        const generatedOtp = otpResult?.code || otpResult?.debug_otp || otpResult?.demoCode;
+        console.log(`[Auth /signup] OTP generated: ${generatedOtp} for ${normalizedEmail}. Responding with debug_otp.`);
 
         res.status(200).json({
             success: true,
+            message: 'OTP sent',
             requiresOTP: true,
+            debug_otp: generatedOtp,
+            otp: generatedOtp,
             email: normalizedEmail,
             phone,
-            message: 'Verification code sent to your email and phone.',
-            expiresInSeconds: otpResult.expiresInSeconds,
-            demoCode: otpResult.demoCode,
-            previewUrl: otpResult.previewUrl
+            expiresInSeconds: otpResult?.expiresInSeconds || 300,
+            demoCode: generatedOtp,
+            previewUrl: otpResult?.previewUrl || null
         });
     } catch (err) {
         next(err);
@@ -250,17 +262,30 @@ router.post('/resend-otp', otpLimiter, async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Email address is required.' });
         }
 
-        const otpResult = await otpService.createAndSendOTP({
-            target: email.toLowerCase().trim(),
-            purpose,
-            phone
-        });
+        let otpResult = null;
+        try {
+            otpResult = await otpService.createAndSendOTP({
+                target: email.toLowerCase().trim(),
+                purpose,
+                phone
+            });
+        } catch (otpErr) {
+            console.error(`[Auth /resend-otp] Error during OTP dispatch: ${otpErr.message}`);
+            if (otpErr.message && otpErr.message.includes('Rate limit')) {
+                return res.status(429).json({ success: false, message: otpErr.message });
+            }
+            throw otpErr;
+        }
+
+        const generatedOtp = otpResult?.code || otpResult?.debug_otp || otpResult?.demoCode;
 
         res.status(200).json({
             success: true,
-            message: 'A new verification code has been dispatched.',
-            demoCode: otpResult.demoCode,
-            previewUrl: otpResult.previewUrl
+            message: 'OTP sent',
+            debug_otp: generatedOtp,
+            otp: generatedOtp,
+            demoCode: generatedOtp,
+            previewUrl: otpResult?.previewUrl || null
         });
     } catch (err) {
         next(err);

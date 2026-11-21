@@ -652,7 +652,7 @@ async function submitSignup(e) {
             phone,
             password: pass,
             purpose: 'signup',
-            demoCode: res.demoCode
+            demoCode: res.debug_otp || res.demoCode || res.otp
         });
 
     } catch (err) {
