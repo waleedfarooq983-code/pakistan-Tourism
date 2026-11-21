@@ -392,9 +392,6 @@ function renderAuthUI() {
             <a href="signup.html" class="btn btn-primary btn-sm">
                 <i class="fas fa-user-plus"></i> Sign Up
             </a>
-            <a href="admin-login.html" class="admin-icon-link" title="Staff & Admin Portal" style="color:var(--ink-400);font-size:.95rem;padding:6px 8px;margin-left:2px;display:inline-flex;align-items:center;border-radius:4px;transition:.2s;">
-                <i class="fas fa-shield-alt"></i>
-            </a>
             <button class="menu-toggle"><i class="fas fa-bars"></i></button>
         `;
     }

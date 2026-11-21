@@ -50,6 +50,15 @@ export const otpService = {
 
         logger.info(`[OTP] Generated for ${normalizedTarget} [Purpose: ${purpose}]`);
 
+        // Prominent console log for testing / inspection in Railway terminal logs
+        console.log('\n======================================================');
+        console.log(`🔐 [DISCOVER PAKISTAN - OTP VERIFICATION CODE]`);
+        console.log(`👉 Target:   ${normalizedTarget}`);
+        console.log(`👉 Purpose:  ${purpose}`);
+        console.log(`👉 CODE:     >>> ${code} <<<`);
+        console.log(`👉 Expires:  ${OTP_EXPIRY_MINUTES} minutes`);
+        console.log('======================================================\n');
+
         // Send Email
         let emailResult = null;
         if (normalizedTarget.includes('@')) {

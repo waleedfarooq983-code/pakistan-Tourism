@@ -150,6 +150,8 @@ router.post('/signup', authLimiter, validate(signupSchema), async (req, res, nex
             phone
         });
 
+        console.log(`[Auth /signup] OTP generated and dispatched for ${normalizedEmail}. Code logged above.`);
+
         res.status(200).json({
             success: true,
             requiresOTP: true,
@@ -175,11 +177,13 @@ router.post('/verify-otp', authLimiter, validate(verifyOtpSchema), async (req, r
         const normalizedEmail = email.toLowerCase().trim();
 
         // 1. Verify OTP
+        console.log(`[Auth /verify-otp] Verifying OTP ${code} for ${normalizedEmail} (purpose: ${purpose})...`);
         await otpService.verifyOTP({
             target: normalizedEmail,
             code,
             purpose
         });
+        console.log(`[Auth /verify-otp] OTP verified successfully for ${normalizedEmail}`);
 
         // If purpose is signup, create the user account
         if (purpose === 'signup') {
