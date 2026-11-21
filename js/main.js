@@ -704,7 +704,7 @@ async function sendAiChat(e) {
         const url = (typeof API !== 'undefined' && API.getBaseUrl ? API.getBaseUrl() : 'https://pakistan-tourism-wj.up.railway.app') + '/api/chat';
         const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) });
         const data = await res.json();
-        typing.innerHTML = `<div style="background:#eafaf1;color:#1e4620;padding:8px 12px;border-radius:10px;align-self:flex-start;max-width:85%;">${data.reply || data.error || 'No response.'}</div>`;
+        typing.innerHTML = `<div style="background:#eafaf1;color:#1e4620;padding:8px 12px;border-radius:10px;align-self:flex-start;max-width:85%;">${data.reply || data.message || data.error || 'No response.'}</div>`;
     } catch {
         typing.innerHTML = `<div style="background:#fde8e8;color:#c0392b;padding:8px 12px;border-radius:10px;align-self:flex-start;">Could not reach chat server.</div>`;
     }

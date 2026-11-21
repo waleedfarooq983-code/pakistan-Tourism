@@ -1,5 +1,5 @@
 import dns from 'node:dns/promises';
-dns.setServers(['1.1.1.1', '8.8.8.8']);
+try { dns.setServers(['1.1.1.1', '8.8.8.8']); } catch {}
 import express from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Tour from '../models/Tour.js';
