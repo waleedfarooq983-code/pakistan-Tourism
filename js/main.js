@@ -528,7 +528,92 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ============================================================
    SOCIAL AUTHENTICATION (Google & Facebook)
    ============================================================ */
-function openSocialModal(provider) {
+function getSavedSocialAccounts(provider) {
+    try {
+        const list = JSON.parse(localStorage.getItem('dpk_saved_social_accounts') || '[]');
+        return list.filter(a => a.provider === provider);
+    } catch {
+        return [];
+    }
+}
+
+function saveSocialAccount(provider, email, name, avatar) {
+    try {
+        let list = JSON.parse(localStorage.getItem('dpk_saved_social_accounts') || '[]');
+        list = list.filter(a => !(a.email.toLowerCase() === email.toLowerCase() && a.provider === provider));
+        list.unshift({
+            provider,
+            email: email.toLowerCase().trim(),
+            name: name.trim(),
+            avatar: avatar || null,
+            lastLogin: Date.now()
+        });
+        localStorage.setItem('dpk_saved_social_accounts', JSON.stringify(list.slice(0, 5)));
+    } catch {}
+}
+
+function removeSocialAccount(email, provider, event) {
+    if (event) event.stopPropagation();
+    try {
+        let list = JSON.parse(localStorage.getItem('dpk_saved_social_accounts') || '[]');
+        list = list.filter(a => !(a.email.toLowerCase() === email.toLowerCase() && a.provider === provider));
+        localStorage.setItem('dpk_saved_social_accounts', JSON.stringify(list));
+        openSocialModal(provider, { prompt: 'select_account' });
+    } catch {}
+}
+
+function openSocialModal(provider, options = { prompt: 'select_account' }) {
+    // 1. Firebase Auth support: enforce prompt: 'select_account'
+    if (typeof firebase !== 'undefined' && firebase.auth && provider === 'google') {
+        try {
+            const googleProvider = new firebase.auth.GoogleAuthProvider();
+            googleProvider.setCustomParameters({ prompt: 'select_account' });
+            firebase.auth().signInWithPopup(googleProvider)
+                .then(result => {
+                    if (result && result.user) {
+                        const u = result.user;
+                        performSocialLogin('google', u.email, u.displayName || u.email.split('@')[0], u.photoURL, u.uid);
+                    }
+                })
+                .catch(fbErr => {
+                    if (fbErr.code !== 'auth/popup-closed-by-user' && fbErr.code !== 'auth/cancelled-popup-request') {
+                        if (typeof showToast === 'function') showToast(fbErr.message || 'Google login failed', 'error');
+                    }
+                });
+            return;
+        } catch (e) {
+            console.warn('[Firebase Auth Provider] Fallback to custom account chooser:', e);
+        }
+    }
+
+    // 2. Google Identity Services (GIS) support: enforce prompt: 'select_account'
+    if (window.google?.accounts?.oauth2 && provider === 'google' && window.GOOGLE_CLIENT_ID) {
+        try {
+            const client = google.accounts.oauth2.initTokenClient({
+                client_id: window.GOOGLE_CLIENT_ID,
+                scope: 'email profile openid',
+                prompt: 'select_account',
+                callback: async (resp) => {
+                    if (resp && resp.access_token) {
+                        try {
+                            const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                                headers: { Authorization: `Bearer ${resp.access_token}` }
+                            }).then(r => r.json());
+                            return performSocialLogin('google', userInfo.email, userInfo.name, userInfo.picture, userInfo.sub);
+                        } catch (err) {
+                            console.error('Google userInfo fetch failed:', err);
+                        }
+                    }
+                }
+            });
+            client.requestAccessToken({ prompt: 'select_account' });
+            return;
+        } catch (e) {
+            console.warn('[Google GIS] Fallback to custom account chooser:', e);
+        }
+    }
+
+    // 3. Custom Backend Social Modal (forces account selection every time)
     let modal = document.getElementById('socialAuthModal');
     if (!modal) {
         modal = document.createElement('div');
@@ -549,10 +634,13 @@ function openSocialModal(provider) {
         ? `<svg width="24" height="24" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2-6.4-4.8L1.9 16.4C3.7 20.1 7.5 23 12 23z"/></svg>`
         : `<i class="fab fa-facebook-f" style="color:#1877F2;font-size:24px;"></i>`;
 
+    const savedAccounts = getSavedSocialAccounts(provider);
+    const showAccountList = savedAccounts.length > 0;
+
     modal.innerHTML = `
         <div style="background:white;width:100%;max-width:440px;border-radius:16px;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
             <!-- Header -->
-            <div style="padding:24px 28px 16px;border-bottom:1px solid #edf2f7;display:flex;align-items:center;justify-content:space-between;">
+            <div style="padding:22px 28px 16px;border-bottom:1px solid #edf2f7;display:flex;align-items:center;justify-content:space-between;">
                 <div style="display:flex;align-items:center;gap:12px;">
                     ${brandIcon}
                     <div>
@@ -563,46 +651,66 @@ function openSocialModal(provider) {
                 <button type="button" onclick="closeSocialModal()" style="background:none;border:none;font-size:1.2rem;color:#a0aec0;cursor:pointer;padding:4px 8px;border-radius:6px;">✕</button>
             </div>
 
-            <!-- Body -->
+            <!-- Body (Forces Account Selection screen every time) -->
             <div style="padding:24px 28px;" id="socialModalBody">
-                <p style="margin:0 0 14px;font-size:.88rem;color:#4a5568;font-weight:600;">Choose an account</p>
-                
-                <!-- Quick Account -->
-                <div onclick="performSocialLogin('${provider}', 'waleedfarooq983@gmail.com', 'M. Waleed', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100')"
-                     style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;cursor:pointer;margin-bottom:10px;transition:.2s;"
-                     onmouseover="this.style.background='#f7fafc';this.style.borderColor='${brandColor}'"
-                     onmouseout="this.style.background='white';this.style.borderColor='#e2e8f0'">
-                    <div style="width:40px;height:40px;border-radius:50%;background:${brandColor};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;">
-                        W
+                <div id="socialAccountSelectView" style="display:${showAccountList ? 'block' : 'none'};">
+                    <p style="margin:0 0 14px;font-size:.88rem;color:#4a5568;font-weight:600;">Choose an account</p>
+                    
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+                        ${savedAccounts.map(acc => `
+                            <div onclick="performSocialLogin('${provider}', '${acc.email.replace(/'/g, "\\'")}', '${acc.name.replace(/'/g, "\\'")}', '${acc.avatar ? acc.avatar.replace(/'/g, "\\'") : ''}')"
+                                 style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;cursor:pointer;transition:.2s;position:relative;"
+                                 onmouseover="this.style.background='#f7fafc';this.style.borderColor='${brandColor}'"
+                                 onmouseout="this.style.background='white';this.style.borderColor='#e2e8f0'">
+                                <div style="width:40px;height:40px;border-radius:50%;background:${brandColor};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;overflow:hidden;flex-shrink:0;">
+                                    ${acc.avatar ? `<img src="${acc.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;">` : (acc.name ? acc.name.charAt(0).toUpperCase() : 'U')}
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:700;font-size:.92rem;color:#2d3748;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${acc.name || 'Traveler'}</div>
+                                    <div style="font-size:.8rem;color:#718096;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${acc.email}</div>
+                                </div>
+                                <button type="button" onclick="removeSocialAccount('${acc.email.replace(/'/g, "\\'")}', '${provider}', event)" title="Remove account from device"
+                                        style="background:none;border:none;color:#a0aec0;cursor:pointer;padding:6px;border-radius:4px;font-size:.85rem;line-height:1;"
+                                        onmouseover="this.style.color='#e53e3e'" onmouseout="this.style.color='#a0aec0'">✕</button>
+                            </div>
+                        `).join('')}
                     </div>
-                    <div style="flex:1;">
-                        <div style="font-weight:700;font-size:.92rem;color:#2d3748;">M. Waleed</div>
-                        <div style="font-size:.8rem;color:#718096;">waleedfarooq983@gmail.com</div>
+
+                    <div style="text-align:center;padding-top:4px;">
+                        <button type="button" onclick="showCustomSocialForm('${provider}')" style="background:none;border:none;color:${brandColor};font-size:.88rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                            <i class="fas fa-user-plus"></i> Use another ${brandName} account
+                        </button>
                     </div>
-                    <i class="fas fa-chevron-right" style="color:#cbd5e0;font-size:.85rem;"></i>
                 </div>
 
-                <!-- Custom Account Toggle -->
-                <div style="margin-top:14px;text-align:center;">
-                    <button type="button" onclick="toggleCustomSocialAccount('${provider}')" style="background:none;border:none;color:${brandColor};font-size:.86rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-                        <i class="fas fa-user-plus"></i> Use another ${brandName} account
-                    </button>
+                <!-- Custom Account Form (Active when no saved accounts exist, or toggled) -->
+                <div id="socialCustomAccountView" style="display:${showAccountList ? 'none' : 'block'};">
+                    <p style="margin:0 0 14px;font-size:.88rem;color:#4a5568;font-weight:600;">
+                        Enter your ${brandName} account
+                    </p>
+                    <form id="customSocialForm" onsubmit="submitCustomSocial(event, '${provider}')">
+                        <div style="margin-bottom:12px;">
+                            <label style="display:block;font-size:.78rem;font-weight:700;color:#4a5568;margin-bottom:4px;text-transform:uppercase;">${brandName} Email</label>
+                            <input type="email" id="customSocialEmail" placeholder="${isGoogle ? 'user@gmail.com' : 'user@example.com'}" required
+                                   style="width:100%;padding:11px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:.92rem;outline:none;">
+                        </div>
+                        <div style="margin-bottom:16px;">
+                            <label style="display:block;font-size:.78rem;font-weight:700;color:#4a5568;margin-bottom:4px;text-transform:uppercase;">Full Name</label>
+                            <input type="text" id="customSocialName" placeholder="e.g. Sarah Khan" required
+                                   style="width:100%;padding:11px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:.92rem;outline:none;">
+                        </div>
+                        <button type="submit" style="width:100%;padding:12px;background:${brandColor};color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.95rem;">
+                            Sign in with ${brandName}
+                        </button>
+                        ${showAccountList ? `
+                            <div style="text-align:center;margin-top:12px;">
+                                <button type="button" onclick="showSavedAccountsList('${provider}')" style="background:none;border:none;color:#718096;font-size:.84rem;cursor:pointer;">
+                                    ← Back to account list
+                                </button>
+                            </div>
+                        ` : ''}
+                    </form>
                 </div>
-
-                <!-- Custom Account Form -->
-                <form id="customSocialForm" onsubmit="submitCustomSocial(event, '${provider}')" style="display:none;margin-top:16px;padding-top:16px;border-top:1px dashed #e2e8f0;">
-                    <div style="margin-bottom:12px;">
-                        <label style="display:block;font-size:.78rem;font-weight:700;color:#4a5568;margin-bottom:4px;text-transform:uppercase;">Full Name</label>
-                        <input type="text" id="customSocialName" placeholder="e.g. Sarah Khan" required style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:.9rem;outline:none;">
-                    </div>
-                    <div style="margin-bottom:14px;">
-                        <label style="display:block;font-size:.78rem;font-weight:700;color:#4a5568;margin-bottom:4px;text-transform:uppercase;">${brandName} Email</label>
-                        <input type="email" id="customSocialEmail" placeholder="user@gmail.com" required style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:.9rem;outline:none;">
-                    </div>
-                    <button type="submit" style="width:100%;padding:12px;background:${brandColor};color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.92rem;">
-                        Continue with ${brandName}
-                    </button>
-                </form>
 
                 <p style="margin:20px 0 0;font-size:.75rem;color:#a0aec0;text-align:center;line-height:1.4;">
                     By continuing, you agree to Discover Pakistan's Terms of Service and Privacy Policy.
@@ -619,9 +727,26 @@ function closeSocialModal() {
     if (modal) modal.style.display = 'none';
 }
 
+function showCustomSocialForm(provider) {
+    const selectView = document.getElementById('socialAccountSelectView');
+    const customView = document.getElementById('socialCustomAccountView');
+    if (selectView) selectView.style.display = 'none';
+    if (customView) {
+        customView.style.display = 'block';
+        const emailInput = document.getElementById('customSocialEmail');
+        if (emailInput) setTimeout(() => emailInput.focus(), 100);
+    }
+}
+
+function showSavedAccountsList(provider) {
+    const selectView = document.getElementById('socialAccountSelectView');
+    const customView = document.getElementById('socialCustomAccountView');
+    if (selectView) selectView.style.display = 'block';
+    if (customView) customView.style.display = 'none';
+}
+
 function toggleCustomSocialAccount(provider) {
-    const form = document.getElementById('customSocialForm');
-    if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    showCustomSocialForm(provider);
 }
 
 function submitCustomSocial(e, provider) {
@@ -633,6 +758,9 @@ function submitCustomSocial(e, provider) {
 }
 
 async function performSocialLogin(provider, email, name, avatar) {
+    // Record account for future selection list
+    saveSocialAccount(provider, email, name, avatar);
+
     const body = document.getElementById('socialModalBody');
     if (body) {
         body.innerHTML = `
